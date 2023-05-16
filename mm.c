@@ -14,10 +14,8 @@
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
-
 #include "mm.h"
 #include "memlib.h"
-
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
  * provide your team information in the following struct.
@@ -37,12 +35,13 @@ team_t team = {
 
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
-
+#define LISTLIMIT   20
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
 
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
+
 
 #define WSIZE   8
 #define DSIZE   16
@@ -78,13 +77,15 @@ team_t team = {
 #define PUT_NEXT_FBLKP(bp,ptr)   (*(void **)(bp)=(char*)ptr)
 #define PUT_PREV_FBLKP(bp,ptr)   (*(void **)(bp+WSIZE)=(char*)ptr)
 
+
 // next와 ,prev를 가르키는 포인터
 void *heap_listp;
 char *free_listp;
-
+void *segregated_lists[LISTLIMIT];
 /* new_freelist */
 static void make_freelist(void *bp)
 {
+
     // printf("new freelist\n");
     void* root = free_listp;
     if (root==NULL){
@@ -106,11 +107,15 @@ static void delete_freelist(void *bp)
     // printf("delete freelist\n");
     char *prev_free = *PREV_FBLKP(bp);
     char *next_free = *NEXT_FBLKP(bp);
-    if (prev_free!=NULL) {PUT_NEXT_FBLKP(prev_free,next_free);
+    if (prev_free!=NULL) {
+        PUT_NEXT_FBLKP(prev_free,next_free);
     }
-    if (next_free!=NULL) {PUT_PREV_FBLKP(next_free,prev_free);
+    if (next_free!=NULL) {
+        PUT_PREV_FBLKP(next_free,prev_free);
     }
-    if (free_listp==bp) free_listp=next_free;
+    if (free_listp==bp) {
+        free_listp=next_free;
+    }
 
 }
 /*
@@ -279,17 +284,49 @@ void mm_free(void *bp)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-    void *oldptr = ptr;
-    void *newptr;
-    size_t copySize;
+    /*
+    #define NEXT_FBLKP(bp)   ((void **)(bp))
+    #define PREV_FBLKP(bp)   ((void **)(bp+WSIZE))
+
+    #define PUT_NEXT_FBLKP(bp,ptr)   (*(void **)(bp)=(char*)ptr)
+    #define PUT_PREV_FBLKP(bp,ptr)   (*(void **)(bp+WSIZE)=(char*)ptr)
+    // 이전 블록의 크기를 탐색하여 다음 블록의 주소를 계산하기
+    #define NEXT_BLKP(bp)   ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
+    // 이전 블록의 주소를 계산해서 이전 블록에 대한 작업 수행용
+    #define PREV_BLKP(bp)   ((char *)(bp) - GET_SIZE(((char *)(bp)- DSIZE)))
     
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
-      return NULL;
-    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
-    if (size < copySize)
-      copySize = size;
-    memcpy(newptr, oldptr, copySize);
-    mm_free(oldptr);
-    return newptr;
+    할당체크
+    #define GET_ALLOC(p) (GET(p) & 0x1)
+    */
+
+   //가독성을 높이기 위한 ptr realloc 메모리 변환전을 가르키는 포인터
+    void *oldptr = ptr;
+    size_t copySize;
+    size_t oldsize = GET_SIZE(HDRP(oldptr));
+    size_t newsize = size + DSIZE;
+    size_t csize = oldsize + GET_SIZE(HDRP(NEXT_BLKP(oldptr)));
+    size_t check_free = GET_ALLOC(HDRP(NEXT_BLKP(oldptr)));
+
+    if(size == 0) {
+        mm_free(oldptr);
+        return NULL;
+    }
+    else if(oldsize >= newsize){
+        return oldptr;
+    }
+    else{
+        if(!check_free && csize >= newsize){
+            delete_freelist(NEXT_BLKP(oldptr));
+            PUT(HDRP(ptr), PACK(csize,1));
+            PUT(FTRP(ptr), PACK(csize,1));
+            return ptr;
+        }
+        else{
+            void *newptr = mm_malloc(newsize);
+            memcpy(newptr, oldptr, oldsize);
+            mm_free(oldptr);
+            return newptr;
+        }
+    }
+    return NULL;
 }

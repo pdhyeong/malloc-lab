@@ -18,6 +18,4 @@ typedef struct {
     char *name2;    /* full name of second member (if any) */
     char *id2;      /* login ID of second member */
 } team_t;
-
 extern team_t team;
-

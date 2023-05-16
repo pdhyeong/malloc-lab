@@ -9,6 +9,8 @@
         "string": "c",
         "string_view": "c",
         "unordered_map": "c",
-        "vector": "c"
+        "vector": "c",
+        "signal.h": "c",
+        "locale": "c"
     }
 }
